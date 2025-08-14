@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>TO-DO-APP</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: "Roboto", Arial, sans-serif;
+            background: #3f18f0;
+            margin: 0;
+        }
+        .container {
+            max-width: 100%;
+            width: 100vw;
+            margin: 0;
+            background: #fff;
+            border-radius: 0;
+            box-shadow: none;
+            padding: 0;
+        }
+        .header {
+            background: #2196f3;
+            color: #fff;
+            padding: 24px 16px 16px 16px;
+            text-align: center;
+            font-size: 24px;
+            letter-spacing: 1px;
+        }
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            padding: 16px;
+            gap: 12px;
+        }
+        label {
+            font-size: 16px;
+            color: #333;
+        }
+        input {
+            padding: 12px;
+            font-size: 16px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: #fafafa;
+            outline: none;
+        }
+        input:focus {
+            border-color: #2196f3;
+        }
+        button {
+            background: #2196f3;
+            color: #fff;
+            padding: 14px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            margin-top: 8px;
+            width: 100%;
+            box-shadow: 0 2px 4px rgba(33,150,243,0.08);
+            transition: background 0.2s;
+        }
+        button:hover {
+            background: #1976d2;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 0;
+        }
+        th, td {
+            padding: 10px 6px;
+            border-bottom: 1px solid #eee;
+            text-align: left;
+            font-size: 15px;
+        }
+        th {
+            background: #e3f2fd;
+            color: #1976d2;
+            font-weight: 500;
+        }
+        .action-btn {
+            background: #f44336;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            padding: 8px 12px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        .action-btn:hover {
+            background: #d32f2f;
+        }
+        @media (max-width: 600px) {
+            .form-group, .header {
+                padding-left: 8px;
+                padding-right: 8px;
+            }
+            th, td {
+                font-size: 13px;
+                padding: 8px 4px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">TO-DO LIST</div>
+        <div class="form-group">
+            <label for="title">Title</label>
+            <input type="text" id="title" placeholder="Enter task title" />
+            <label for="description">Description</label>
+            <input type="text" id="description" placeholder="Enter task description" />
+            <label for="date">Date</label>
+            <input type="date" id="date" />
+            <label for="time">Time</label>
+            <input type="time" id="time" />
+            <button onclick="scheduleReminder();">ADD TASK</button>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th>Title</th>
+                    <th>Description</th>
+                    <th>Date & Time</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody id="reminderTableBody"></tbody>
+        </table>
+    </div>
+    <audio src="mixkit-urgent-simple-tone-loop-2976.wav" id="notificationSound"></audio>
+    <script>
+        // Service Worker registration
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+                navigator.serviceWorker.register('/sw.js').then(function(registration) {
+                    console.log('ServiceWorker registration successful with scope: ', registration.scope);
+                }, function(err) {
+                    console.log('ServiceWorker registration failed: ', err);
+                });
+            });
+        }
+
+        // Request notification permission
+        if ("Notification" in window) {
+            Notification.requestPermission().then(function (permission) {
+                if (permission === "granted") {
+                    console.log("Notification permission granted.");
+                }
+            });
+        }
+
+        var reminders = [];
+        var nextReminderId = 0; // Unique ID for each reminder
+
+        function saveReminders() {
+            localStorage.setItem('reminders', JSON.stringify(reminders));
+        }
+
+        function loadReminders() {
+            var storedReminders = localStorage.getItem('reminders');
+            if (storedReminders) {
+                reminders = JSON.parse(storedReminders);
+                reminders.forEach(function(reminder) {
+                    addReminderToTable(reminder.title, reminder.description, reminder.datetime, reminder.id);
+                    scheduleNotification(reminder);
+                    // Update nextReminderId to avoid duplicates
+                    if (reminder.id >= nextReminderId) {
+                        nextReminderId = reminder.id + 1;
+                    }
+                });
+            }
+        }
+
+        function scheduleNotification(reminder) {
+            var scheduledTime = new Date(reminder.datetime);
+            var currentTime = new Date();
+            var timeDifference = scheduledTime - currentTime;
+
+            if (timeDifference > 0) {
+                // Send a message to the service worker to schedule the notification
+                if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+                    navigator.serviceWorker.controller.postMessage({
+                        type: 'schedule-notification',
+                        id: reminder.id,
+                        title: reminder.title,
+                        description: reminder.description,
+                        timeDifference: timeDifference
+                    });
+                } else {
+                    // Fallback if no service worker is active
+                    setTimeout(function () {
+                        document.getElementById("notificationSound").play();
+                        if ("Notification" in window && Notification.permission === "granted") {
+                            new Notification(reminder.title, {
+                                body: reminder.description,
+                                requireInteraction: true,
+                            });
+                        } else {
+                            alert("Reminder: " + reminder.title + "\n" + reminder.description);
+                        }
+                    }, timeDifference);
+                }
+            }
+        }
+
+        function scheduleReminder() {
+            var title = document.getElementById("title").value;
+            var description = document.getElementById("description").value;
+            var date = document.getElementById("date").value;
+            var time = document.getElementById("time").value;
+            
+            if (!title || !date || !time) {
+                alert("Please fill out all fields.");
+                return;
+            }
+
+            var datetimeString = date + "T" + time;
+            var scheduledTime = new Date(datetimeString);
+            var currentTime = new Date();
+
+            if (scheduledTime > currentTime) {
+                var newReminder = {
+                    id: nextReminderId++,
+                    title: title,
+                    description: description,
+                    datetime: datetimeString
+                };
+                reminders.push(newReminder);
+                saveReminders();
+                addReminderToTable(title, description, datetimeString, newReminder.id);
+                scheduleNotification(newReminder);
+
+                document.getElementById("title").value = "";
+                document.getElementById("description").value = "";
+                document.getElementById("date").value = "";
+                document.getElementById("time").value = "";
+            } else {
+                alert("Please select a future time.");
+            }
+        }
+
+        function addReminderToTable(title, description, datetimeString, id) {
+            var tableBody = document.getElementById("reminderTableBody");
+            var row = tableBody.insertRow();
+            var titleCell = row.insertCell(0);
+            var descriptionCell = row.insertCell(1);
+            var datetimeCell = row.insertCell(2);
+            var actionCell = row.insertCell(3);
+
+            titleCell.innerHTML = title;
+            descriptionCell.innerHTML = description;
+            datetimeCell.innerHTML = datetimeString.replace('T', ' ');
+            actionCell.innerHTML = `<button class="action-btn" onclick="deleteReminder(this, ${id})">Delete</button>`;
+        }
+        function deleteReminder(button, id) {
+            var row = button.closest("tr");
+            var index = reminders.findIndex(r => r.id === id);
+            if (index !== -1) {
+                reminders.splice(index, 1);
+                saveReminders();
+            }
+            // Send a message to the service worker to cancel the timeout
+            if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+                navigator.serviceWorker.controller.postMessage({
+                    type: 'cancel-notification',
+                    id: id
+                });
+            }
+            row.remove();
+        }
+        document.addEventListener('DOMContentLoaded', loadReminders);
+    </script>
+</body>
+</html>
