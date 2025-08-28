@@ -130,7 +130,7 @@
     </div>
     <audio src="mixkit-urgent-simple-tone-loop-2976.wav" id="notificationSound"></audio>
     <script>
-        // Service Worker registration
+        
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function() {
                 navigator.serviceWorker.register('/sw.js').then(function(registration) {
@@ -141,7 +141,7 @@
             });
         }
 
-        // Request notification permission
+      
         if ("Notification" in window) {
             Notification.requestPermission().then(function (permission) {
                 if (permission === "granted") {
@@ -151,7 +151,7 @@
         }
 
         var reminders = [];
-        var nextReminderId = 0; // Unique ID for each reminder
+        var nextReminderId = 0; 
 
         function saveReminders() {
             localStorage.setItem('reminders', JSON.stringify(reminders));
@@ -164,7 +164,7 @@
                 reminders.forEach(function(reminder) {
                     addReminderToTable(reminder.title, reminder.description, reminder.datetime, reminder.id);
                     scheduleNotification(reminder);
-                    // Update nextReminderId to avoid duplicates
+                
                     if (reminder.id >= nextReminderId) {
                         nextReminderId = reminder.id + 1;
                     }
@@ -178,7 +178,7 @@
             var timeDifference = scheduledTime - currentTime;
 
             if (timeDifference > 0) {
-                // Send a message to the service worker to schedule the notification
+               
                 if (navigator.serviceWorker && navigator.serviceWorker.controller) {
                     navigator.serviceWorker.controller.postMessage({
                         type: 'schedule-notification',
@@ -188,7 +188,7 @@
                         timeDifference: timeDifference
                     });
                 } else {
-                    // Fallback if no service worker is active
+                  
                     setTimeout(function () {
                         document.getElementById("notificationSound").play();
                         if ("Notification" in window && Notification.permission === "granted") {
@@ -260,7 +260,7 @@
                 reminders.splice(index, 1);
                 saveReminders();
             }
-            // Send a message to the service worker to cancel the timeout
+         
             if (navigator.serviceWorker && navigator.serviceWorker.controller) {
                 navigator.serviceWorker.controller.postMessage({
                     type: 'cancel-notification',
@@ -273,3 +273,4 @@
     </script>
 </body>
 </html>
+
